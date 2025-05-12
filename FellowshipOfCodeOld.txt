@@ -1,0 +1,930 @@
+/**
+* FellowshipOfCode is the main class that runs the game:
+* Fellowship of Code: A Java Adventure in Middle Earth.
+*
+* @author Nicholas Battle
+* @version 1.0
+*/
+import java.util.Scanner;
+import java.util.ArrayList;
+import java.util.Random;
+import java.io.IOException;
+import java.io.FileWriter;
+import java.io.FileReader;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+
+public class FellowshipOfCode
+{
+    private ArrayList<Creature> fellowship;
+    private ArrayList<Cave> labyrinth;
+    private ArrayList<Cave> visitedCaves;
+    private ArrayList<Creature> deadCreatures;
+    private Creature codeHolder;
+    private int codeExchanges;
+    private int totalFights;
+    private int fellowshipWins;
+    private boolean gameActive;
+    private Scanner scanner;
+    private Random random;
+
+    /**
+    * Default constructor for FellowshipOfCode
+    */
+    public FellowshipOfCode()
+    {
+        this.fellowship = new ArrayList<>();
+        this.labyrinth = new ArrayList<>();
+        this.visitedCaves = new ArrayList<>();
+        this.deadCreatures = new ArrayList<>();
+        this.codeExchanges = 0;
+        this.totalFights = 0;
+        this.fellowshipWins = 0;
+        this.gameActive = true;
+        this.scanner = new Scanner(System.in);
+        this.random = new Random();
+    }
+
+    /**
+    * Main method to run the game.
+    *
+    * @param args Command line arguments (not used)
+    */
+    public static void main(String[] args)
+    {
+        FellowshipOfCode game = new FellowshipOfCode();
+        game.displayWelcome();
+        game.createFellowship();
+        game.loadLabyrinth();
+        game.startQuest();
+        game.displaySummary();
+        game.writeSummaryToFile();
+    }
+
+    /**
+    * Adds a creature to the dead creatures list
+    *
+    * @param creature The creature that died :(
+    */
+    public void addDeadCreature(Creature creature)
+    {
+        if (creature != null)
+        {
+            this.deadCreatures.add(creature);
+        }
+    }
+
+    /**
+    * Adds a visited cave to the list of visited caves.
+    *
+    * @param cave The cave that was visited
+    */
+    public void addVisitedCave(Cave cave)
+    {
+        if (cave != null && !this.visitedCaves.contains(cave))
+        {
+            this.visitedCaves.add(cave);
+        }
+    }
+
+    /**
+    * Creates the fellowship based on user input
+    */
+    private void createFellowship()
+    {
+        System.out.println("\nNow you must choose the members of your Fellowship (maximum of 4).");
+        System.out.println("The leader will be a hobbit and the rest can be elves or dwarves.");
+
+        //Add hobbit leader
+        System.out.println("\nFirst, let's name your hobbit leader:");
+        String name = this.scanner.nextLine();
+        Hobbit hobbit = new Hobbit(name);
+        this.fellowship.add(hobbit);
+        this.codeHolder = hobbit; //Hobit starts with the code :)
+
+        int remainingMembers = 3;
+        while (remainingMembers > 0)
+        {
+            System.out.println("\nChoose member type (or enter 'done' to continue with current Fellowship):");
+            System.out.println("1. Elf (Power: 5. has special weapon)");
+            System.out.println("2. Dwarf (Power: 7, no special weapon)");
+
+            String choice = this.scanner.nextLine();
+
+            if (choice.equalsIgnoreCase("done"))
+            {
+                break;
+            }
+
+            //add validations for numberic input
+            boolean validChoice = false;
+            while (!validChoice)
+            {
+                if (choice.equals("1") || choice.equals("2"))
+                {
+                    validChoice = true;
+                }
+                else
+                {
+                    System.out.println("Please enter a valid number (1-2) or 'done':");
+                    choice = this.scanner.nextLine();
+
+                    if (choice.equalsIgnoreCase("done"))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            //only proceed to ask for name if a valid choice was made.
+            if (validChoice)
+            {
+                if (choice.equals("1"))
+                {
+                    System.out.println("Enter name for this elf:");
+                    name = this.scanner.nextLine();
+                    this.fellowship.add(new Elf(name));
+                    System.out.println("Elf " + name + " added to the Fellowship!");
+                }
+                else if (choice.equals("2"))
+                {
+                    System.out.println("Enter name for this dwarf");
+                    name = this.scanner.nextLine();
+                    this.fellowship.add(new Dwarf(name));
+                    System.out.println("Dwarf " + name + " added to the Fellowship!");
+                }
+            }
+            else
+            {
+                System.out.println("Invalid choice. Please try again.");
+                continue;
+            }
+
+            remainingMembers--;
+        }
+
+        System.out.println("\nYour Fellowship consists of:");
+        for (Creature member : this.fellowship)
+        {
+            System.out.println("- " + member.getName() + " (" + member.getClass().getSimpleName() + ")");
+        }
+    }
+
+    /**
+    * Displays the fight success rate of the fellowship
+    *
+    * @return Fight success rate
+    */
+    public double displayFightSuccessRate()
+    {
+        if (this.totalFights == 0)
+        {
+            return 0.0;
+        }
+
+        return (double) this.fellowshipWins * 100 / this.totalFights;
+    }
+
+    /**
+    * Displays the game status during play
+    *
+    * @param currentCave The current cave
+    * @param nextCave The next cave to enter
+    */
+    private void displayGameStatus(Cave currentCave, Cave nextCave)
+    {
+        System.out.println("\n--- CURRENT STATUS ---");
+
+        //display visited caves
+        System.out.println("\nVisited Caves:");
+        for (Cave cave : this.visitedCaves)
+        {
+            String creatureInfo = cave.getCreature() != null ?
+                    " (Contains" + cave.getCreature().getClass().getSimpleName() + " - "
+                    + cave.getCreature().getName() + ")" : " (Empty)";
+            System.out.println("Cave " + cave.getId() + creatureInfo);
+        }
+
+        //display code holder
+        System.out.println("\nSecret Code is held by: " + this.codeHolder.getName() + 
+                " (" + this.codeHolder.getClass().getSimpleName() + ")");
+        
+        //display damage points
+        System.out.println("\nDamage Points:");
+        for (Creature member : this.fellowship)
+        {
+            if (!this.deadCreatures.contains(member))
+            {
+                System.out.println(member.getName() + " (" + 
+                        member.getClass().getSimpleName() + "): " + member.getDamagePoints());
+            }
+        }
+
+        for (Cave cave : this.visitedCaves)
+        {
+            if (cave.getCreature() != null && !this.deadCreatures.contains(cave.getCreature()))
+            {
+                System.out.println(cave.getCreature().getName() + " (" + 
+                        cave.getCreature().getClass().getSimpleName() + "): " + 
+                        cave.getCreature().getDamagePoints());
+            }
+        }
+
+        //display next cave
+        System.out.println("\nNext cave to enter: Cave " + nextCave.getId());
+    }
+
+    /**
+    * Displays summary at the end of the game
+    */
+    private void displaySummary()
+    {
+        System.out.println("\n=== QUEST SUMMARY ===");
+
+        //display outcome
+        boolean success = false;
+        for (Creature member : this.fellowship)
+        {
+            if (!this.deadCreatures.contains(member) && member == this.codeHolder)
+            {
+                success = true;
+                break;
+            }
+        }
+
+        if (success)
+        {
+            System.out.println("OUTCOME: SUCCESS! The code was delivered to the Java Wizard on Mount Api.");
+            System.out.println("The code was delivered by: " + this.codeHolder.getName() + 
+                    " (" + this.codeHolder.getClass().getSimpleName() + ")");
+        }
+        else
+        {
+            System.out.println("OUTCOME: FAILURE! The Fellowship failed to deliver the code.");
+            System.out.println("The code is held by: " + this.codeHolder.getName() + 
+                    " (" + this.codeHolder.getClass().getSimpleName() + ")");
+        }
+
+        //display stats
+        System.out.println("\nNumber of caves visited: " + this.visitedCaves.size());
+        System.out.println("Number of times the secret code changed hands: " + this.codeExchanges);
+
+        //display dead creatures
+        System.out.println("\nCreatures that died during the quest:");
+        if (this.deadCreatures.isEmpty())
+        {
+            System.out.println("None");
+        }
+        else
+        {
+            for (Creature creature : this.deadCreatures)
+            {
+                System.out.println("- " + creature.getName() + " (" + 
+                        creature.getClass().getSimpleName() + ")");
+            }
+        }
+
+        //display fight success rate
+        System.out.println("\nFellowship fight success rate: " + 
+                String.format("%.2f", this.displayFightSuccessRate()) + "%");
+    }
+
+    /**
+    * Displays welcome message and instructions.
+    */
+    private void displayWelcome()
+    {
+        System.out.println("=======================================================");
+        System.out.println("   FELLOWSHIP OF CODE: A JAVA ADVENTURE IN MIDDLE EARTH");
+        System.out.println("=======================================================");
+        System.out.println("\nWelcome brave adventurer!");
+        System.out.println("Your quest is to lead a Fellowship through a labyrinth in Middle Earth");
+        System.out.println("to deliver a secret code to the Java Wizard on Mount Api.");
+
+        System.out.println("\nINSTRUCTIONS:");
+        System.out.println("- Your fellowship will be led by a hobbit and can include elves and dwarves");
+        System.out.println("- Navigate through caves and fight evil creatures (orcs, trolls and goblins)");
+        System.out.println("- Protect the secret code from being stolen");
+        System.out.println("- Reach Mount Api with the code to complete your quest");
+        System.out.println("- If all Fellowship members die, the quest fails");
+        System.out.println("- Good luck on your journey!");
+    }
+
+    /**
+    * Gets the active fellowship members (not dead).
+    *
+    * @return ArrayList of active fellowship members
+    */
+    public ArrayList<Creature> getActiveFellowshipMembers()
+    {
+        ArrayList<Creature> activeMembers = new ArrayList<>();
+
+        for (Creature member : this.fellowship)
+        {
+            if (!this.deadCreatures.contains(member))
+            {
+                activeMembers.add(member);
+            }
+        }
+
+        return activeMembers;
+    }
+
+    /**
+    * Gets the fellowship members list
+    *
+    * @return ArrayList of fellowship members
+    */
+    public ArrayList<Creature> getFellowship()
+    {
+        return this.fellowship;
+    }
+
+    /**
+    * Handles a fight between a Fellowship member and a cave creature.
+    *
+    * @param fellowshipMember The fellowship member fighting
+    * @param caveCreature The cave creature being fought
+    */
+    private void handleFight(Creature fellowshipMember, Creature caveCreature)
+    {
+        System.out.println("\n--- FIGHT BEGINS ---");
+        System.out.println(fellowshipMember.getName() + " (" + 
+                fellowshipMember.getClass().getSimpleName() + ") vs " + 
+                caveCreature.getName() + " (" + caveCreature.getClass().getSimpleName() + ")");
+        
+        //check if special weapon will be used
+        boolean useSpecialWeapon = false;
+        if ((fellowshipMember instanceof Hobbit || fellowshipMember instanceof Elf)
+                && !((GoodCreature) fellowshipMember).hasUsedSpecialWeapon())
+        {
+            System.out.println(fellowshipMember.getName() + " has a special weapon available!");
+            System.out.println("Use special weapon? (yes/no)");
+            
+
+            // Validation for the yes/no response
+            String choice = "";
+            boolean validInput = false;
+
+            while(!validInput)
+            {
+                choice = this.scanner.nextLine();
+                if(choice.equalsIgnoreCase("yes") || choice.equalsIgnoreCase("no"))
+                {
+                    validInput = true;
+                }
+                else
+                {
+                    System.out.println("Please enter 'yes' or 'no':");
+                }
+            }
+
+            if (choice.equalsIgnoreCase("yes"))
+            {
+                useSpecialWeapon = true;
+                ((GoodCreature) fellowshipMember).setHasUsedSpecialWeapon(true);
+                System.out.println(fellowshipMember.getName() + " uses their special weapon!");
+            }
+        }
+
+        this.totalFights++;
+        boolean fellowshipWins;
+
+        //determine outcome with special weapon
+        if (useSpecialWeapon)
+        {
+            fellowshipWins = true;
+            System.out.println("The special weapon instantly defeats " + caveCreature.getName() + "!");
+            this.deadCreatures.add(caveCreature);
+        }
+        //determine outcome based on power difference
+        else
+        {
+            int powerDifference = fellowshipMember.getPower() - caveCreature.getPower();
+            int winChance;
+
+            if (powerDifference >= 4)
+            {
+                winChance = 90;
+            }
+            else if (powerDifference >= 3)
+            {
+                winChance = 80;
+            }
+            else if (powerDifference >= 2)
+            {
+                winChance = 70;
+            }
+            else if (powerDifference >= 1)
+            {
+                winChance = 60;
+            }
+            else if (powerDifference == 0)
+            {
+                winChance = 50;
+            }
+            else if (powerDifference >= -1)
+            {
+                winChance = 40;
+            }
+            else if (powerDifference >= -2)
+            {
+                winChance = 30;
+            }
+            else if (powerDifference >= -3)
+            {
+                winChance = 20;
+            }
+            else
+            {
+                winChance = 10;
+            }
+
+            int roll = this.random.nextInt(100) + 1;
+            fellowshipWins = roll <= winChance;
+
+            System.out.println("Power difference: " + powerDifference);
+            System.out.println("Win chance: " + winChance + "%");
+            System.out.println("Roll: " + roll);
+        }
+
+        // Apply outcome
+        if (fellowshipWins)
+        {
+            System.out.println(fellowshipMember.getName() + " wins the fight!");
+            this.fellowshipWins++;
+
+            //update damage points
+            if (!useSpecialWeapon)
+            {
+                fellowshipMember.setDamagePoints(fellowshipMember.getDamagePoints() + 1);
+                caveCreature.setDamagePoints(caveCreature.getDamagePoints() + 4);
+            }
+
+            //update code holder (if necessary)
+            if (this.codeHolder == caveCreature)
+            {
+                this.codeHolder = fellowshipMember;
+                this.codeExchanges++;
+                System.out.println(fellowshipMember.getName() + " has recovered the secret code!");
+            }
+        }
+        else
+        {
+            System.out.println(caveCreature.getName() + " wins the fight!");
+
+            //update damage points
+            fellowshipMember.setDamagePoints(fellowshipMember.getDamagePoints() + 4);
+            caveCreature.setDamagePoints(caveCreature.getDamagePoints() + 1);
+
+            //update code holder (if necessary)
+            if (this.codeHolder == fellowshipMember)
+            {
+                this.codeHolder = caveCreature;
+                this.codeExchanges++;
+                System.out.println(caveCreature.getName() + " has stolen the secret code!");
+            }
+        }
+
+        //check if anyone died :(
+        if (fellowshipMember.getDamagePoints() >= 10)
+        {
+            System.out.println(fellowshipMember.getName() + " has died from their wounds!");
+            this.deadCreatures.add(fellowshipMember);
+
+            //check if the Fellowship is all dead (this will end the game)
+            if (this.getActiveFellowshipMembers().isEmpty())
+            {
+                System.out.println("All members of the fellowship have perished! The quest has failed.");
+                this.gameActive = false;
+            }
+        }
+
+        if (caveCreature.getDamagePoints() >= 10)
+        {
+            System.out.println(caveCreature.getName() + " has died from their wounds!");
+            this.deadCreatures.add(caveCreature);
+        }
+
+        System.out.println("--- FIGHT ENDS ---");
+    }
+
+    /**
+    * Loads the labyrinth from the labyrinth.txt file.
+    */
+    private void loadLabyrinth()
+    {
+        try (BufferedReader reader = new BufferedReader(new FileReader("labyrinth.txt")))
+        {
+            String line;
+            while ((line = reader.readLine()) != null)
+            {
+                String[] parts = line.split(",");
+                if (parts.length == 5)
+                {
+                    int id = Integer.parseInt(parts[0]);
+                    int north = Integer.parseInt(parts[1]);
+                    int east = Integer.parseInt(parts[2]);
+                    int south = Integer.parseInt(parts[3]);
+                    int west = Integer.parseInt(parts[4]);
+
+                    this.labyrinth.add(new Cave(id, north, east, south, west));
+                }
+            }
+
+            System.out.println("\nLabyrinth loaded successfully with " + 
+                    this.labyrinth.size() + " caves.");
+        }
+        catch (IOException | NumberFormatException e)
+        {
+            System.out.println("Error loading labyrinth: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    /**
+    * Sets the code holder creature.
+    *
+    * @param creature The creature who now holds the code
+    */
+    public void setCodeHolder(Creature creature)
+    {
+        if (creature != null)
+        {
+            this.codeHolder = creature;
+        }
+    }
+
+    /**
+    * Sets the fellowship wins counter.
+    *
+    * @param wins The number of fellowship wins
+    */
+    public void setFellowshipWins(int wins)
+    {
+        if (wins >= 0)
+        {
+            this.fellowshipWins = wins;
+        }
+    }
+
+    /**
+    * Sets the total fights counter.
+    *
+    * @param fights The total number of fights
+    */
+    public void setTotalFights(int fights)
+    {
+        if (fights >= 0)
+        {
+            this.totalFights = fights;
+        }
+    }
+
+    /**
+    * Starts the quest through the labyrinth.
+    */
+    private void startQuest()
+    {
+        Cave currentCave = this.labyrinth.get(0); //start at the first cave
+        this.addVisitedCave(currentCave);
+
+        System.out.println("\nThe quest begins! The Fellowship enters the first cave.");
+
+        while (this.gameActive)
+        {
+            System.out.println("\n--- CAVE " + currentCave.getId() + " ---");
+
+            //check is there is a creature in the cave
+            if (currentCave.getCreature() == null)
+            {
+                //75% chance of generating a creature
+                if (this.random.nextInt(100) < 75)
+                {
+                    // Generate a random evil creature
+                    int creatureType = this.random.nextInt(3);
+                    Creature caveCreature;
+
+                    switch (creatureType)
+                    {
+                        case 0:
+                            caveCreature = new Orc("Orc " + this.random.nextInt(100));
+                            break;
+                        case 1:
+                            caveCreature = new Troll("Troll " + this.random.nextInt(100));
+                            break;
+                        default:
+                            caveCreature = new Goblin("Goblin " + this.random.nextInt(100));
+                            break;
+                    }
+
+                    currentCave.setCreature(caveCreature);
+                    System.out.println("The Fellowship encounters " + caveCreature.getName() + 
+                            ", a " + caveCreature.getClass().getSimpleName() + "!");
+                }
+            }
+
+            //handle cave logic
+            if (currentCave.getCreature() == null || 
+                    this.deadCreatures.contains(currentCave.getCreature()))
+            {
+                System.out.println("The cave is empty or the creature is already dead.");
+
+                // Fellowship recovers
+                for (Creature member : this.getActiveFellowshipMembers())
+                {
+                    if (member.getDamagePoints() > 0)
+                    {
+                        member.setDamagePoints(member.getDamagePoints() - 1);
+                    }
+                }
+                System.out.println("The Fellowship members recover 1 damage point each.");
+            }
+            else
+            {
+                Creature caveCreature = currentCave.getCreature();
+
+                System.out.println("The Fellowship must fight " + caveCreature.getName() + 
+                        ", a " + caveCreature.getClass().getSimpleName() + "!");
+                    
+                //choose fellowship member to fight
+                ArrayList<Creature> activeMembers = this.getActiveFellowshipMembers();
+
+                System.out.println("\nChoose a Fellowship member to fight:");
+                for (int i = 0; i < activeMembers.size(); i++)
+                {
+                    Creature member = activeMembers.get(i);
+                    String specialWeaponInfo = "";
+
+                    if (member instanceof GoodCreature)
+                    {
+                        GoodCreature goodMember = (GoodCreature)member;
+                        if (goodMember.hasSpecialWeapon())
+                        {
+                            specialWeaponInfo = goodMember.hasUsedSpecialWeapon() ?
+                                ", Special weapon: used" : ", Special weapon: available";
+                        }
+                    }
+
+                    System.out.println((i + 1) + ". " + member.getName() + 
+                            " (" + member.getClass().getSimpleName() + 
+                            ", Power: " + member.getPower() + 
+                            ", Damage: " + member.getDamagePoints() + 
+                            specialWeaponInfo + ")");
+                }
+
+                int choice = -1;
+                while (choice < 0 || choice >= activeMembers.size())
+                {
+                    try
+                    {
+                        System.out.print("Enter your choice (1-" + activeMembers.size() + "): ");
+                        choice = Integer.parseInt(this.scanner.nextLine()) - 1;
+
+                        if (choice < 0 || choice >= activeMembers.size())
+                        {
+                            System.out.println("Invalid choice. Please try again.");
+                        }
+                    }
+                    catch (NumberFormatException e)
+                    {
+                        System.out.println("Please enter a valid number.");
+                    }
+                }
+
+                Creature selectedMember = activeMembers.get(choice);
+                this.handleFight(selectedMember, caveCreature);
+            }
+
+            //check if the game is still active
+            if (!this.gameActive)
+            {
+                break;
+            }
+
+            //choose next cave
+            Cave nextCave = this.chooseNextCave(currentCave);
+
+            //check if the next cave is Mount Api
+            if (nextCave.getId() == 100)
+            {
+                //check if the Fellowship has the code
+                boolean fellowshipHasCode = false;
+                for (Creature member : this.getActiveFellowshipMembers())
+                {
+                    if (member == this.codeHolder)
+                    {
+                        fellowshipHasCode = true;
+                        break;
+                    }
+                }
+
+                if (fellowshipHasCode)
+                {
+                    System.out.println("\nThe Fellowship has reached Mount Api with the secret code!");
+                    System.out.println("The code is delivered to the Java wizard by " + 
+                            this.codeHolder.getName() + ".");
+                    this.gameActive = false;
+                    this.addVisitedCave(nextCave); //add Mount Api to visited caves
+                    break;
+                }
+                else
+                {
+                    System.out.println("\nThe Fellowship has reached Mount Api, but doesn't have the code!");
+                    System.out.println("The fellowship must go back and recover the code.");
+                    nextCave = this.chooseNextCave(currentCave, true); //force different choice.
+                }
+            }
+
+            // Display status and move to the next cave
+            this.displayGameStatus(currentCave, nextCave);
+            currentCave = nextCave;
+            this.addVisitedCave(currentCave);
+        }
+    }
+
+    /**
+    * Chooses the next cave to enter.
+    *
+    * @param currentCave The current cave
+    * @return The next cave to enter
+    */
+    private Cave chooseNextCave(Cave currentCave)
+    {
+        return this.chooseNextCave(currentCave, false);
+    }
+
+    /**
+    * Chooses the next cave to enter with an option to force a different choice.
+    *
+    * @param currentCave The current cave
+    * @param forceNewChoice Whether to force a different choice
+    * @return The next cave to enter
+    */
+    private Cave chooseNextCave(Cave currentCave, boolean forceNewChoice)
+    {
+        ArrayList<Integer> options = new ArrayList<>();
+        ArrayList<String> directions = new ArrayList<>();
+
+        //check available directions
+        if (currentCave.getNorth() != 0)
+        {
+            options.add(currentCave.getNorth());
+            directions.add("North");
+        }
+        if (currentCave.getEast() != 0)
+        {
+            options.add(currentCave.getEast());
+            directions.add("East");
+        }
+        if (currentCave.getSouth() != 0)
+        {
+            options.add(currentCave.getSouth());
+            directions.add("South");
+        }
+        if (currentCave.getWest() != 0)
+        {
+            options.add(currentCave.getWest());
+            directions.add("West");
+        }
+
+        // If only one option, return that cave
+        if (options.size() == 1)
+        {
+            System.out.println("\nThere is only one way forward (" + directions.get(0) + ").");
+
+            // Find the cave with the matching ID
+            for (Cave cave : this.labyrinth)
+            {
+                if (cave.getId() == options.get(0))
+                {
+                    return cave;
+                }
+            }
+        }
+
+        // Otherwise, let the player choose
+        System.out.println("\nChoose a direction to move:");
+        for (int i = 0; i < options.size(); i++)
+        {
+            String destination = options.get(i) == 100 ? "Mount Api" : "Cave " + options.get(i);
+            System.out.println((i + 1) + ". " + directions.get(i) + " to " + destination);
+        }
+
+        int previousChoice = -1;
+        if (forceNewChoice)
+        {
+            // Remember the previous choice (Mount Api) to avoid it
+            previousChoice = 0;
+            for (int i = 0; i < options.size(); i++)
+            {
+                if (options.get(i) == 100)
+                {
+                    previousChoice = i;
+                    break;
+                }
+            }
+        }
+
+        int choice = -1;
+        while (choice < 0 || choice >= options.size() || choice == previousChoice)
+        {
+            try
+            {
+                System.out.print("Enter your choice (1-" + options.size() + "): ");
+                choice = Integer.parseInt(this.scanner.nextLine()) - 1;
+
+                if (choice < 0 || choice >= options.size())
+                {
+                    System.out.println("Invalid choice. Please try again.");
+                }
+                else if (choice == previousChoice)
+                {
+                    System.out.println("You cannot go to Mount Api without the code. Choose another direction.");
+                }
+            }
+            catch (NumberFormatException e)
+            {
+                System.out.println("Please eneter a valid number.");
+            }
+        }
+
+        int nextCaveId = options.get(choice);
+
+        //find the cave with the matching ID
+        for (Cave cave : this.labyrinth)
+        {
+            if (cave.getId() == nextCaveId)
+            {
+                return cave;
+            }
+        }
+
+        //should never reach here
+        return currentCave;
+    }
+
+    /**
+    * Writes the game summary to the fellowship.txt file.
+    */
+    private void writeSummaryToFile()
+    {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("fellowship.txt")))
+        {
+            writer.write("=== FELLOWSHIP OF CODE QUEST SUMMARY ===\n\n");
+
+            //write outcome
+            boolean success = false;
+            for (Creature member : this.fellowship)
+            {
+                if(!this.deadCreatures.contains(member) && member == this.codeHolder)
+                {
+                    success = true;
+                    break;
+                }
+            }
+
+            if (success)
+            {
+                writer.write("OUTCOME: SUCCESS! The code was delivered to the Java wizard on Mount Api.\n");
+                writer.write("The code was delivered by: " + this.codeHolder.getName() + 
+                        " (" + this.codeHolder.getClass().getSimpleName() + ")\n");
+            }
+            else
+            {
+                writer.write("OUTCOME: FAILURE! The Fellowship failed to deliver the code.\n");
+                writer.write("The code is held by: " + this.codeHolder.getName() + 
+                        " (" + this.codeHolder.getClass().getSimpleName() + ")\n");
+            }
+
+            //write stats
+            writer.write("\nNumber of caves visited: " + this.visitedCaves.size() + "\n");
+            writer.write("Number of times the secret code changed hands: " + this.codeExchanges + "\n");
+
+            //write dead creatures
+            writer.write("\nCreatures that died during the quest:\n");
+            if (this.deadCreatures.isEmpty())
+            {
+                writer.write("None\n");
+            }
+            else
+            {
+                for (Creature creature : this.deadCreatures)
+                {
+                    writer.write("- " + creature.getName() + " (" + 
+                            creature.getClass().getSimpleName() + ")\n");
+                }
+            }
+
+            //write fight success rate
+            writer.write("\nFellowship fight success rate: " + 
+                    String.format("%.2f", this.displayFightSuccessRate()) + "%\n");
+
+            System.out.println("\nSummary has been written to fellowship.txt");
+        }
+        catch (IOException e)
+        {
+            System.out.println("Error writing summary to file: " + e.getMessage());
+        }
+    }
+}
